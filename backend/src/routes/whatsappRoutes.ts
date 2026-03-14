@@ -3,16 +3,20 @@ import isAuth from "../middleware/isAuth";
 
 import * as WhatsAppController from "../controllers/WhatsAppController";
 import * as MetaController from "../controllers/MetaController";
+import * as EvolutionWebhookController from "../controllers/EvolutionWebhookController";
 
 import multer from "multer";
 import uploadConfig from "../config/upload";
 import { mediaUpload } from "../services/WhatsappService/uploadMediaAttachment";
 import { deleteMedia } from "../services/WhatsappService/uploadMediaAttachment";
 
+
 const upload = multer(uploadConfig);
 
 
 const whatsappRoutes = express.Router();
+
+whatsappRoutes.post("/evolution-webhook/:whatsappId", EvolutionWebhookController.receiveWebhook);
 
 whatsappRoutes.get("/whatsapp/", isAuth, WhatsAppController.index);
 whatsappRoutes.get("/whatsapp/filter", isAuth, WhatsAppController.indexFilter);

@@ -34,6 +34,7 @@ RUN set -eux; \
 
 # Copia o restante do código
 COPY . .
+
 # Build info (gera arquivos .git-commit e .build-date no estágio de build)
 ARG GIT_COMMIT
 ARG BUILD_DATE
@@ -44,6 +45,7 @@ RUN set -eux; \
   if [ -z "$DATE" ]; then DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"; fi; \
   printf "%s" "$COMMIT" > .git-commit; \
   printf "%s" "$DATE" > .build-date
+
 # Garante diretório público mesmo que não exista no repo (evita falha no COPY do runtime)
 RUN mkdir -p public
 
@@ -54,16 +56,23 @@ RUN npm run build
 RUN npm prune --omit=dev \
   && npm cache clean --force
 
+
 # --- Runtime ---
 FROM node:20-bullseye-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Dependências de runtime necessárias (FFmpeg para processamento/conversão de mídia)
+# Dependências de runtime necessárias (FFmpeg) e instalação do Dockerize
+ENV DOCKERIZE_VERSION v0.8.0
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        ffmpeg \
+       wget \
+       ca-certificates \
+  && wget -O - https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz | tar xzf - -C /usr/local/bin \
+  && apt-get remove -y wget ca-certificates \
+  && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
 
 # Build info injection
@@ -80,6 +89,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 COPY --from=build /app/certs ./certs
+
 # Build info files (presentes em runtime para fallback)
 COPY --from=build /app/.git-commit ./.git-commit
 COPY --from=build /app/.build-date ./.build-date
@@ -87,13 +97,15 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/.sequelizerc ./.sequelizerc
 RUN mkdir -p ./private
 
+# Instala o Chromium
 RUN apt-get update \
-  && apt-get install -y chromium
+  && apt-get install -y chromium \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 EXPOSE 8080
 
-# Executa o servidor compilado (sem nodemon em produção)
+# Executa o servidor compilado (lembre-se de manter o comando de inicialização no docker-compose se sobrescrever o CMD)
 CMD ["node", "dist/server.js"]

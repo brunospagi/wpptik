@@ -1,5 +1,4 @@
 import * as Yup from "yup";
-
 import AppError from "../../errors/AppError";
 import Whatsapp from "../../models/Whatsapp";
 import Company from "../../models/Company";
@@ -18,35 +17,26 @@ interface Request {
   isDefault?: boolean;
   token?: string;
   provider?: string;
-  facebookUserId?: string;
-  facebookUserToken?: string;
-  tokenMeta?: string;
   channel?: string;
-  facebookPageUserId?: string;
-  maxUseBotQueues?: string;
-  timeUseBotQueues?: string;
-  expiresTicket?: number;
-  allowGroup?: boolean;
-  sendIdQueue?: number;
   timeSendQueue?: number;
+  sendIdQueue?: number;
+  timeUseBotQueues?: string | number;
+  maxUseBotQueues?: string | number;
+  expiresTicket?: number;
+  expiresInactiveMessage?: string;
   timeInactiveMessage?: string;
   inactiveMessage?: string;
-  maxUseBotQueuesNPS?: number;
-  expiresTicketNPS?: number;
-  whenExpiresTicket?: string;
-  expiresInactiveMessage?: string;
   groupAsTicket?: string;
   importOldMessages?: string;
-  importRecentMessages?:string;
-  importOldMessagesGroups?: boolean;
+  importRecentMessages?: string;
   closedTicketsPostImported?: boolean;
+  importOldMessagesGroups?: boolean;
   timeCreateNewTicket?: number;
-  integrationId?: number;
   schedules?: any[];
   promptId?: number;
+  collectiveVacationEnd?: string;
   collectiveVacationMessage?: string;
   collectiveVacationStart?: string;
-  collectiveVacationEnd?: string;
   queueIdImportMessages?: number;
   flowIdNotPhrase?: number;
   flowIdWelcome?: number;
@@ -55,6 +45,14 @@ interface Request {
   wabaAccessToken?: string;
   wabaBusinessAccountId?: string;
   wabaWebhookVerifyToken?: string;
+  allowGroup?: boolean;
+  maxUseBotQueuesNPS?: number;
+  expiresTicketNPS?: number;
+  whenExpiresTicket?: string;
+  // ---------- EVOLUTION API ----------
+  evolutionApiUrl?: string;
+  evolutionApiKey?: string;
+  evolutionInstanceName?: string;
 }
 
 interface Response {
@@ -69,35 +67,26 @@ const CreateWhatsAppService = async ({
   greetingMessage,
   complationMessage,
   outOfHoursMessage,
+  ratingMessage,
   isDefault = false,
   companyId,
   token = "",
   provider = "beta",
-  facebookUserId,
-  facebookUserToken,
-  facebookPageUserId,
-  tokenMeta,
   channel = "whatsapp",
-  maxUseBotQueues,
-  timeUseBotQueues,
-  expiresTicket,
-  allowGroup = false,
   timeSendQueue,
   sendIdQueue,
+  timeUseBotQueues,
+  maxUseBotQueues,
+  expiresTicket,
+  expiresInactiveMessage,
   timeInactiveMessage,
   inactiveMessage,
-  ratingMessage,
-  maxUseBotQueuesNPS,
-  expiresTicketNPS,
-  whenExpiresTicket,
-  expiresInactiveMessage,
   groupAsTicket,
   importOldMessages,
   importRecentMessages,
   closedTicketsPostImported,
   importOldMessagesGroups,
   timeCreateNewTicket,
-  integrationId,
   schedules,
   promptId,
   collectiveVacationEnd,
@@ -111,26 +100,27 @@ const CreateWhatsAppService = async ({
   wabaAccessToken,
   wabaBusinessAccountId,
   wabaWebhookVerifyToken,
+  allowGroup,
+  maxUseBotQueuesNPS,
+  expiresTicketNPS,
+  whenExpiresTicket,
+  // ---------- EVOLUTION API ----------
+  evolutionApiUrl,
+  evolutionApiKey,
+  evolutionInstanceName
 }: Request): Promise<Response> => {
   const company = await Company.findOne({
-    where: {
-      id: companyId,
-    },
+    where: { id: companyId },
     include: [{ model: Plan, as: "plan" }]
   });
 
   if (company !== null) {
-    const whatsappCount = await Whatsapp.count({
-      where: {
-        companyId,
-        channel: channel
-      }
+    const whatsappsCount = await Whatsapp.count({
+      where: { companyId }
     });
 
-    if (whatsappCount >= company.plan.connections) {
-      throw new AppError(
-        `Número máximo de conexões já alcançado: ${whatsappCount}`
-      );
+    if (whatsappsCount >= company.plan.connections) {
+      throw new AppError(`Número máximo de conexões já alcançado: ${whatsappsCount}`);
     }
   }
 
@@ -144,7 +134,7 @@ const CreateWhatsAppService = async ({
         async value => {
           if (!value) return false;
           const nameExists = await Whatsapp.findOne({
-            where: { name: value, channel: channel, companyId }
+            where: { name: value, companyId }
           });
           return !nameExists;
         }
@@ -159,17 +149,16 @@ const CreateWhatsAppService = async ({
   }
 
   const whatsappFound = await Whatsapp.findOne({ where: { companyId } });
-
-  isDefault = channel === "whatsapp" ? !whatsappFound : false
+  isDefault = !whatsappFound;
 
   let oldDefaultWhatsapp: Whatsapp | null = null;
 
-  if (channel === 'whatsapp' && isDefault) {
+  if (isDefault) {
     oldDefaultWhatsapp = await Whatsapp.findOne({
-      where: { isDefault: true, companyId, channel: channel }
+      where: { isDefault: true, companyId }
     });
     if (oldDefaultWhatsapp) {
-      await oldDefaultWhatsapp.update({ isDefault: false, companyId });
+      await oldDefaultWhatsapp.update({ isDefault: false });
     }
   }
 
@@ -188,7 +177,7 @@ const CreateWhatsAppService = async ({
           async value => {
             if (!value) return false;
             const tokenExists = await Whatsapp.findOne({
-              where: { token: value, channel: channel }
+              where: { token: value }
             });
             return !tokenExists;
           }
@@ -202,6 +191,16 @@ const CreateWhatsAppService = async ({
     }
   }
 
+  // ==========================================
+  // CORREÇÃO: Forçar canal evolution
+  // ==========================================
+  let finalChannel = channel || "whatsapp";
+
+  if (channelType === "evolution" || (evolutionInstanceName && evolutionInstanceName.trim() !== "")) {
+    finalChannel = "evolution";
+  }
+  // ==========================================
+
   const whatsapp = await Whatsapp.create(
     {
       name,
@@ -214,30 +213,21 @@ const CreateWhatsAppService = async ({
       companyId,
       token,
       provider,
-      channel,
-      facebookUserId,
-      facebookUserToken,
-      facebookPageUserId,
-      tokenMeta,
-      maxUseBotQueues,
-      timeUseBotQueues,
-      expiresTicket,
-      allowGroup,
+      channel: finalChannel, // <-- Aplicado aqui
       timeSendQueue,
       sendIdQueue,
+      timeUseBotQueues,
+      maxUseBotQueues,
+      expiresTicket,
+      expiresInactiveMessage,
       timeInactiveMessage,
       inactiveMessage,
-      maxUseBotQueuesNPS,
-      expiresTicketNPS,
-      whenExpiresTicket,
-      expiresInactiveMessage,
       groupAsTicket,
       importOldMessages,
       importRecentMessages,
       closedTicketsPostImported,
       importOldMessagesGroups,
       timeCreateNewTicket,
-      integrationId,
       schedules,
       promptId,
       collectiveVacationEnd,
@@ -246,11 +236,19 @@ const CreateWhatsAppService = async ({
       queueIdImportMessages,
       flowIdNotPhrase,
       flowIdWelcome,
-      channelType,
+      channelType: channelType || finalChannel, // <-- Garante compatibilidade
       wabaPhoneNumberId,
       wabaAccessToken,
       wabaBusinessAccountId,
-      wabaWebhookVerifyToken
+      wabaWebhookVerifyToken,
+      allowGroup,
+      maxUseBotQueuesNPS,
+      expiresTicketNPS,
+      whenExpiresTicket,
+      // ---------- EVOLUTION API ----------
+      evolutionApiUrl,
+      evolutionApiKey,
+      evolutionInstanceName
     },
     { include: ["queues"] }
   );

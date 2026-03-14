@@ -76,39 +76,39 @@ export type ConnectionStatus = "connected" | "disconnected" | "connecting" | "qr
 export interface IWhatsAppAdapter {
   // Identificação
   readonly whatsappId: number;
-  readonly channelType: "baileys" | "official";
-  
+  channelType: "baileys" | "official" | "evolution";
+
   // Inicialização e controle
   initialize(): Promise<void>;
   disconnect(): Promise<void>;
-  
+
   // Envio de mensagens
   sendMessage(options: ISendMessageOptions): Promise<IWhatsAppMessage>;
   sendTextMessage(to: string, body: string): Promise<IWhatsAppMessage>;
   sendMediaMessage(to: string, mediaUrl: string, mediaType: string, caption?: string): Promise<IWhatsAppMessage>;
-  
+
   // Gestão de mensagens
   deleteMessage?(messageId: string): Promise<void>;
   editMessage?(messageId: string, newBody: string): Promise<void>;
-  
+
   // Gestão de perfil e status
   getProfilePicture(jid: string): Promise<string | null>;
   getStatus(jid: string): Promise<string | null>;
   getProfileInfo(jid: string): Promise<IProfileInfo | null>;
-  
+
   // Status da conexão
   getConnectionStatus(): ConnectionStatus;
   getPhoneNumber(): string | null;
-  
+
   // Eventos (callbacks)
   onMessage(callback: (message: IWhatsAppMessage) => void): void;
   onConnectionUpdate(callback: (status: ConnectionStatus) => void): void;
   onQRCode?(callback: (qr: string) => void): void;  // Apenas para Baileys
-  
+
   // Funcionalidades específicas (opcionais)
   markAsRead?(messageId: string): Promise<void>;
   sendPresenceUpdate?(jid: string, type: "available" | "unavailable" | "composing" | "recording"): Promise<void>;
-  
+
   // Dados brutos (para compatibilidade)
   getRawClient?(): any;  // Retorna WASocket (Baileys) ou AxiosInstance (Official)
 }
@@ -118,15 +118,15 @@ export interface IWhatsAppAdapter {
  */
 export interface IWhatsAppAdapterConfig {
   whatsappId: number;
-  channelType: "baileys" | "official";
+  channelType: "baileys" | "official" | "evolution";
   companyId: number;
-  
+
   // Configurações Baileys
   baileys?: {
     name: string;
     allowGroup: boolean;
   };
-  
+
   // Configurações API Oficial
   official?: {
     phoneNumberId: string;

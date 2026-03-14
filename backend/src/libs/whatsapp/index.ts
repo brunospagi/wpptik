@@ -1,21 +1,23 @@
 /**
  * Módulo de abstração WhatsApp
  * Suporta Baileys (não oficial) e WhatsApp Business API (oficial)
- * 
+ *
  * @example
  * ```typescript
  * import { WhatsAppFactory } from './libs/whatsapp';
- * 
+ *
  * // Criar adapter automaticamente baseado no channelType
  * const adapter = await WhatsAppFactory.createAdapter(whatsapp);
- * 
+ *
  * // Inicializar
  * await adapter.initialize();
- * 
+ *
  * // Enviar mensagem
  * const message = await adapter.sendTextMessage('5511999999999', 'Olá!');
  * ```
  */
+
+import e from "express";
 
 // Interfaces
 export {
@@ -31,6 +33,7 @@ export {
 // Adapters
 export { BaileysAdapter } from "./BaileysAdapter";
 export { OfficialAPIAdapter } from "./OfficialAPIAdapter";
+export { EvolutionAPIAdapter } from "./EvolutionAPIAdapter";
 
 // Factory
 export { WhatsAppFactory } from "./WhatsAppFactory";

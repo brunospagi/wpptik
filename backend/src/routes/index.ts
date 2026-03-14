@@ -58,12 +58,14 @@ import tagRuleRoutes from "./tagRuleRoutes";
 import permissionRoutes from "./permissionRoutes";
 import auditLogRoutes from "./auditLogRoutes";
 import whatsappWebhookRoutes from "./whatsappWebhookRoutes";
+import evolutionWebhookRoutes from "./evolutionWebhookRoutes";
 
 
 const routes = Router();
 
 routes.use(userRoutes);
 routes.use("/auth", authRoutes);
+routes.use(evolutionWebhookRoutes);
 routes.use("/api/messages", apiRoutes);
 routes.use(settingRoutes);
 routes.use(contactRoutes);

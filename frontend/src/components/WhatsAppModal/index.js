@@ -90,9 +90,9 @@ const useStyles = makeStyles((theme) => ({
   },
   tokenRefresh: {
     minWidth: "auto",
-    display: "flex", // Torna o botão flexível para alinhar o conteúdo
-    alignItems: "center", // Alinha verticalmente ao centro
-    justifyContent: "center", // Alinha horizontalmente ao centro
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "center", 
   },
 }));
 
@@ -102,7 +102,7 @@ const SessionSchema = Yup.object().shape({
     .max(50, "Parâmetros acima do esperado!")
     .required("Required"),
   channelType: Yup.string()
-    .oneOf(["baileys", "official"], "Tipo de canal inválido")
+    .oneOf(["baileys", "official","evolution"], "Tipo de canal inválido")
     .required("Selecione o tipo de canal"),
   // Validações condicionais para API Oficial
   wabaPhoneNumberId: Yup.string().when("channelType", {
@@ -119,7 +119,8 @@ const SessionSchema = Yup.object().shape({
     is: "official",
     then: Yup.string().required("Business Account ID é obrigatório para API Oficial"),
     otherwise: Yup.string()
-  })
+  }),
+  evolutionApiUrl: Yup.string().url("URL inválida").nullable(),
 });
 
 const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
@@ -168,7 +169,11 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
     wabaPhoneNumberId: "",
     wabaAccessToken: "",
     wabaBusinessAccountId: "",
-    wabaWebhookVerifyToken: ""
+    wabaWebhookVerifyToken: "",
+    // Campos Evolution API
+    evolutionApiUrl: "",
+    evolutionApiKey: "",
+    evolutionInstanceName: ""
   };
   const [whatsApp, setWhatsApp] = useState(initialState);
   const [selectedQueueIds, setSelectedQueueIds] = useState([]);
@@ -186,8 +191,6 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
   const [showOpenAi, setShowOpenAi] = useState(false);
   const [showIntegrations, setShowIntegrations] = useState(false);
   const { user } = useContext(AuthContext);
-
-
 
   const [schedules, setSchedules] = useState([
     { weekday: i18n.t("queueModal.serviceHours.monday"), weekdayEn: "monday", startTimeA: "08:00", endTimeA: "12:00", startTimeB: "13:00", endTimeB: "18:00", },
@@ -221,7 +224,6 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
       setAutoToken(whatsApp.token);
     }
   }, [whatsAppId, whatsApp.token]);
-
 
   useEffect(() => {
     async function fetchData() {
@@ -373,8 +375,6 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
   const handleSaveWhatsApp = async (values) => {
     if (!whatsAppId) setAutoToken(generateRandomCode(30));
 
-
-
     if (NPSEnabled) {
 
       if (isNil(values.ratingMessage)) {
@@ -468,8 +468,8 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
   }
 
   const handleCopyToken = () => {
-    navigator.clipboard.writeText(autoToken); // Copia o token para a área de transferência    
-    setCopied(true); // Define o estado de cópia como verdadeiro
+    navigator.clipboard.writeText(autoToken); 
+    setCopied(true); 
   };
 
   const handleSaveSchedules = async (values) => {
@@ -481,7 +481,6 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
     onClose();
     setWhatsApp(initialState);
     setEnableImportMessage(false);
-    // inputFileRef.current.value = null
     setAttachment(null)
     setAttachmentName("")
     setCopied(false);
@@ -672,6 +671,12 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
                                 <span>Baileys (Não Oficial - Grátis)</span>
                               </Box>
                             </MenuItem>
+                             <MenuItem value="evolution">
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <WhatsApp />
+                                <span>Evolution API (Não Oficial - Grátis)</span>
+                              </Box>
+                            </MenuItem>
                             <MenuItem value="official">
                               <Box display="flex" alignItems="center" gap={1}>
                                 <CheckCircle color="primary" />
@@ -694,6 +699,51 @@ const WhatsAppModal = ({ open, onClose, whatsAppId }) => {
                         />
                       </>
                     )}
+
+                    {/* === INÍCIO DOS CAMPOS DA EVOLUTION API === */}
+                    <div style={{ marginTop: 24, padding: 16, border: '1px dashed #bbb', borderRadius: 8, backgroundColor: '#fafafa' }}>
+                      <Typography variant="subtitle1" color="primary" gutterBottom>
+                        Integração Evolution API (Opcional)
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" gutterBottom style={{ marginBottom: 16 }}>
+                        Preencha para utilizar uma instância externa da Evolution API (v2.3.*) em vez do sistema interno.
+                      </Typography>
+                      
+                      <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+                        <Field
+                          as={TextField}
+                          label="URL da Evolution API"
+                          name="evolutionApiUrl"
+                          variant="outlined"
+                          margin="dense"
+                          fullWidth
+                          placeholder="Ex: https://api.sua-empresa.com"
+                          error={touched.evolutionApiUrl && Boolean(errors.evolutionApiUrl)}
+                          helperText={touched.evolutionApiUrl && errors.evolutionApiUrl}
+                        />
+                        <Field
+                          as={TextField}
+                          label="Global API Key"
+                          name="evolutionApiKey"
+                          type="password"
+                          variant="outlined"
+                          margin="dense"
+                          fullWidth
+                          placeholder="Sua chave secreta"
+                        />
+                      </div>
+                      
+                      <Field
+                        as={TextField}
+                        label="Nome da Instância na Evolution"
+                        name="evolutionInstanceName"
+                        variant="outlined"
+                        margin="dense"
+                        fullWidth
+                        placeholder="Ex: atendimento_01"
+                      />
+                    </div>
+                    {/* === FIM DOS CAMPOS DA EVOLUTION API === */}
 
                     <Divider style={{ margin: "20px 0" }} />
 

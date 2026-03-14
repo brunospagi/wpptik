@@ -128,7 +128,7 @@ class Whatsapp extends Model<Whatsapp> {
   @Column(DataType.TEXT)
   channel: string;
 
-  @Default("baileys")
+  @Default("evolution")
   @Column
   channelType: string;
 
@@ -156,6 +156,15 @@ class Whatsapp extends Model<Whatsapp> {
     vertical?: string;
     websites?: string[];
   };
+
+  @Column(DataType.STRING)
+  evolutionApiUrl: string;
+
+  @Column(DataType.STRING)
+  evolutionApiKey: string;
+
+  @Column(DataType.STRING)
+  evolutionInstanceName: string;
 
   @Default(3)
   @Column
@@ -205,7 +214,7 @@ class Whatsapp extends Model<Whatsapp> {
   @Default("disabled")
   @Column
   groupAsTicket: string;
-  
+
   @Column
   importOldMessages: Date;
 
@@ -214,7 +223,7 @@ class Whatsapp extends Model<Whatsapp> {
 
   @Column
   statusImportMessages: string;
-  
+
   @Column
   closedTicketsPostImported:boolean;
 

@@ -9,17 +9,17 @@ import * as Sentry from "@sentry/node";
 
 /**
  * Inicia sessão WhatsApp usando adapters (Baileys ou Official API)
- * Versão unificada que detecta automaticamente o tipo de canal
+ * Versão unificada que deteta automaticamente o tipo de canal
  */
 export const StartWhatsAppSessionUnified = async (
   whatsapp: Whatsapp,
   companyId: number
 ): Promise<void> => {
-  const channelType = whatsapp.channelType || "baileys";
-  
-  logger.info(`[StartSession] Iniciando ${channelType} para whatsappId=${whatsapp.id}`);
+  const channelType = whatsapp.channel || whatsapp.channelType || "baileys";
 
-  await whatsapp.update({ status: "OPENING" });
+  logger.info(`[StartSession] A iniciar ${channelType} para whatsappId=${whatsapp.id}`);
+
+  await whatsapp.update({ status: "OPENING", qrcode: "" });
 
   const io = getIO();
   io.of(`/workspace-${companyId}`)
@@ -29,98 +29,127 @@ export const StartWhatsAppSessionUnified = async (
     });
 
   try {
-    if (channelType === "baileys") {
-      // ===== BAILEYS (não oficial) =====
+
+    if (channelType === "baileys" || channelType === "whatsapp") {
+
+      // ===== BAILEYS (não oficial local) =====
       logger.info(`[StartSession] Usando Baileys para whatsappId=${whatsapp.id}`);
-      
+
       const wbot = await initWASocket(whatsapp);
-      
+
       if (wbot.id) {
-        // Configurar listeners Baileys (código existente)
         wbotMessageListener(wbot, companyId);
         wbotMonitor(wbot, whatsapp, companyId);
-        
+
         logger.info(`[StartSession] Baileys iniciado com sucesso: ${wbot.user?.id}`);
       }
-      
+
     } else if (channelType === "official") {
+
       // ===== WHATSAPP BUSINESS API OFICIAL =====
       logger.info(`[StartSession] Usando Official API para whatsappId=${whatsapp.id}`);
-      
-      // Criar adapter da API oficial
+
       const adapter = await WhatsAppFactory.createAdapter(whatsapp);
-      
-      // Inicializar (verifica credenciais e conecta)
       await adapter.initialize();
-      
-      // Registrar callback de conexão
+
       adapter.onConnectionUpdate((status) => {
         logger.info(`[StartSession] Official API status changed: ${status}`);
-        
-        // Atualizar status no banco
+
         if (status === "connected") {
           whatsapp.update({ status: "CONNECTED" });
         } else if (status === "disconnected") {
           whatsapp.update({ status: "DISCONNECTED" });
         }
-        
-        // Emitir evento via Socket.IO
+
         io.of(`/workspace-${companyId}`)
           .emit(`company-${companyId}-whatsappSession`, {
             action: "update",
             session: whatsapp
           });
       });
-      
-      // Registrar callback de mensagens recebidas
-      // Nota: Mensagens da Official API vêm via webhooks, não polling
-      // Este callback é chamado pelo webhook handler
+
       adapter.onMessage((message) => {
         logger.debug(`[StartSession] Mensagem recebida via Official API: ${message.id}`);
-        // O processamento da mensagem será feito pelo webhook handler
       });
-      
-      // Atualizar status
-      await whatsapp.update({ 
+
+      await whatsapp.update({
         status: "CONNECTED",
         number: adapter.getPhoneNumber()
       });
-      
+
       logger.info(`[StartSession] Official API conectada: ${adapter.getPhoneNumber()}`);
-      
-      // Emitir evento de conexão
+
       io.of(`/workspace-${companyId}`)
         .emit(`company-${companyId}-whatsappSession`, {
           action: "update",
           session: whatsapp
         });
-      
+
+    } else if (channelType === "evolution") {
+
+      // ===== EVOLUTION API =====
+      logger.info(`[StartSession] Usando Evolution API para whatsappId=${whatsapp.id}`);
+
+      try {
+        const adapter = await WhatsAppFactory.createAdapter(whatsapp);
+
+        // NOVO: Escuta o QR Code vindo do Adapter e envia para o ecrã do painel
+        adapter.onQRCode(async (qrCodeBase64) => {
+          logger.info(`[StartSession] QR Code recebido da Evolution para whatsappId=${whatsapp.id}`);
+          await whatsapp.update({ qrcode: qrCodeBase64, status: "qrcode" });
+
+          io.of(`/workspace-${companyId}`).emit(`company-${companyId}-whatsappSession`, {
+            action: "update",
+            session: whatsapp
+          });
+        });
+
+        // Inicializa (Se não existir, ele vai criar e vai disparar o onQRCode acima)
+        await adapter.initialize();
+
+        const currentStatus = adapter.getConnectionStatus();
+
+        await whatsapp.update({
+          status: currentStatus === "connected" ? "CONNECTED" :
+                  currentStatus === "qrcode" ? "qrcode" : "DISCONNECTED"
+        });
+
+      } catch (error) {
+        logger.error(`[StartSession] Erro na rotina da Evolution: ${error}`);
+        await whatsapp.update({ status: "DISCONNECTED" });
+      }
+
+      logger.info(`[StartSession] Rotina da Evolution finalizada para whatsappId=${whatsapp.id}`);
+
+      io.of(`/workspace-${companyId}`)
+        .emit(`company-${companyId}-whatsappSession`, {
+          action: "update",
+          session: whatsapp
+        });
+
     } else {
       throw new Error(`Tipo de canal não suportado: ${channelType}`);
     }
-    
+
   } catch (err: any) {
     Sentry.captureException(err);
     logger.error(`[StartSession] Erro ao iniciar sessão: ${err.message}`);
-    
-    // Atualizar status de erro
+
     await whatsapp.update({ status: "DISCONNECTED" });
-    
-    // Emitir evento de erro
+
     io.of(`/workspace-${companyId}`)
       .emit(`company-${companyId}-whatsappSession`, {
         action: "update",
         session: whatsapp
       });
-    
+
     throw err;
   }
 };
 
 /**
  * Para manter compatibilidade, exportar também a versão original
- * Apenas delega para a versão unificada
  */
 export const StartWhatsAppSession = StartWhatsAppSessionUnified;
 
-export default StartWhatsAppSession;
+export default StartWhatsAppSessionUnified;

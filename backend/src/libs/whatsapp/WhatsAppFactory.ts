@@ -2,15 +2,17 @@ import Whatsapp from "../../models/Whatsapp";
 import { IWhatsAppAdapter } from "./IWhatsAppAdapter";
 import { BaileysAdapter } from "./BaileysAdapter";
 import { OfficialAPIAdapter } from "./OfficialAPIAdapter";
+import { EvolutionAPIAdapter } from "./EvolutionAPIAdapter"; // Importação mantida
 import AppError from "../../errors/AppError";
 import logger from "../../utils/logger";
 
 /**
  * Factory para criar adapters de WhatsApp
- * Decide qual adapter usar baseado no channelType
+ * Decide qual adapter usar baseado na configuração do banco de dados e channelType
  */
 export class WhatsAppFactory {
-  // Cache de adapters ativos (evita recriar)
+
+  // Cache de adapters ativos (evita recriar conexões em memória)
   private static adapters = new Map<number, IWhatsAppAdapter>();
 
   /**
@@ -20,60 +22,69 @@ export class WhatsAppFactory {
     const whatsappId = whatsapp.id;
     const channelType = whatsapp.channelType || "baileys";
 
-    // Verificar se já existe adapter ativo
+    // Verificar se já existe adapter ativo no cache
     const existingAdapter = this.adapters.get(whatsappId);
     if (existingAdapter) {
-      logger.debug(`[WhatsAppFactory] Retornando adapter existente: ${whatsappId}`);
+      logger.debug(`[WhatsAppFactory] Retornando adapter existente do cache: ${whatsappId}`);
       return existingAdapter;
     }
 
     // Criar novo adapter
     let adapter: IWhatsAppAdapter;
 
-    switch (channelType) {
-      case "baileys":
-        logger.info(`[WhatsAppFactory] Criando BaileysAdapter para whatsappId=${whatsappId}`);
-        adapter = new BaileysAdapter(whatsappId);
-        break;
+    // 1. REGRA PRIORITÁRIA: Verifica se o usuário preencheu a URL da Evolution API
+    if (whatsapp.evolutionApiUrl && whatsapp.evolutionApiUrl.trim() !== "") {
+      logger.info(`[WhatsAppFactory] Criando EvolutionAPIAdapter para whatsappId=${whatsappId}`);
+      // Passamos o model completo do whatsapp para o construtor da Evolution
+      adapter = new EvolutionAPIAdapter(whatsapp);
+    }
+    // 2. Caso não seja Evolution, segue a lógica padrão do sistema (Baileys ou Oficial)
+    else {
+      switch (channelType) {
+        case "baileys":
+          logger.info(`[WhatsAppFactory] Criando BaileysAdapter para whatsappId=${whatsappId}`);
+          adapter = new BaileysAdapter(whatsappId);
+          break;
 
-      case "official":
-        logger.info(`[WhatsAppFactory] Criando OfficialAPIAdapter para whatsappId=${whatsappId}`);
-        
-        // Validar credenciais
-        if (!whatsapp.wabaPhoneNumberId || !whatsapp.wabaAccessToken) {
+        case "official":
+          logger.info(`[WhatsAppFactory] Criando OfficialAPIAdapter para whatsappId=${whatsappId}`);
+
+          // Validar credenciais da API Oficial da Meta
+          if (!whatsapp.wabaPhoneNumberId || !whatsapp.wabaAccessToken) {
+            throw new AppError(
+              "Credenciais WhatsApp Official API não configuradas. Configure phoneNumberId e accessToken.",
+              400
+            );
+          }
+
+          if (!whatsapp.wabaBusinessAccountId) {
+            logger.warn(`[WhatsAppFactory] businessAccountId não configurado para whatsappId=${whatsappId}`);
+          }
+
+          adapter = new OfficialAPIAdapter(whatsappId, {
+            phoneNumberId: whatsapp.wabaPhoneNumberId,
+            accessToken: whatsapp.wabaAccessToken,
+            businessAccountId: whatsapp.wabaBusinessAccountId || "",
+            webhookVerifyToken: whatsapp.wabaWebhookVerifyToken
+          });
+          break;
+
+        default:
           throw new AppError(
-            "Credenciais WhatsApp Official API não configuradas. Configure phoneNumberId e accessToken.",
+            `Tipo de canal não suportado: ${channelType}. Use "baileys", "official" ou configure a Evolution API.`,
             400
           );
-        }
-
-        if (!whatsapp.wabaBusinessAccountId) {
-          logger.warn(`[WhatsAppFactory] businessAccountId não configurado para whatsappId=${whatsappId}`);
-        }
-
-        adapter = new OfficialAPIAdapter(whatsappId, {
-          phoneNumberId: whatsapp.wabaPhoneNumberId,
-          accessToken: whatsapp.wabaAccessToken,
-          businessAccountId: whatsapp.wabaBusinessAccountId || "",
-          webhookVerifyToken: whatsapp.wabaWebhookVerifyToken
-        });
-        break;
-
-      default:
-        throw new AppError(
-          `Tipo de canal não suportado: ${channelType}. Use "baileys" ou "official".`,
-          400
-        );
+      }
     }
 
-    // Armazenar no cache
+    // Armazenar o novo adapter no cache
     this.adapters.set(whatsappId, adapter);
 
     return adapter;
   }
 
   /**
-   * Remove adapter do cache (ao desconectar)
+   * Remove adapter do cache (ao desconectar ou excluir conexão)
    */
   static removeAdapter(whatsappId: number): void {
     const adapter = this.adapters.get(whatsappId);
@@ -105,7 +116,7 @@ export class WhatsAppFactory {
   }
 
   /**
-   * Limpa todos os adapters
+   * Limpa todos os adapters (útil para reinício do sistema)
    */
   static clearAll(): void {
     logger.info(`[WhatsAppFactory] Limpando todos os adapters (${this.adapters.size})`);
@@ -113,28 +124,36 @@ export class WhatsAppFactory {
   }
 
   /**
-   * Estatísticas dos adapters
+   * Estatísticas dos adapters (Atualizado para contar Evolution API)
    */
   static getStats(): {
     total: number;
     baileys: number;
     official: number;
+    evolution: number;
     connected: number;
   } {
     let baileys = 0;
     let official = 0;
+    let evolution = 0;
     let connected = 0;
 
     this.adapters.forEach(adapter => {
-      if (adapter.channelType === "baileys") baileys++;
-      if (adapter.channelType === "official") official++;
-      if (adapter.getConnectionStatus() === "connected") connected++;
+      // Verifica qual classe está sendo instanciada para as estatísticas corretas
+      if (adapter instanceof BaileysAdapter) baileys++;
+      else if (adapter instanceof OfficialAPIAdapter) official++;
+      else if (adapter instanceof EvolutionAPIAdapter) evolution++;
+
+      if (adapter.getConnectionStatus && adapter.getConnectionStatus() === "connected") {
+        connected++;
+      }
     });
 
     return {
       total: this.adapters.size,
       baileys,
       official,
+      evolution,
       connected
     };
   }

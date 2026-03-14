@@ -11,7 +11,7 @@ COPY . .
 
 # Defina a URL do backend aqui!
 # Troque pelo seu domínio público do backend (ou use ARG se quiser mais flexibilidade)
-ENV REACT_APP_BACKEND_URL=https://chatsapi.nobreluminarias.com.br
+ENV REACT_APP_BACKEND_URL=https://api-wpptik.spagisistemas.com.br
 
 # Versão do frontend injetada no build (vinda do CI)
 ARG REACT_APP_FRONTEND_VERSION

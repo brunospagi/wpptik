@@ -1,6 +1,5 @@
 import * as Yup from "yup";
 import { Op } from "sequelize";
-
 import AppError from "../../errors/AppError";
 import Whatsapp from "../../models/Whatsapp";
 import ShowWhatsAppService from "./ShowWhatsAppService";
@@ -14,37 +13,46 @@ interface WhatsappData {
   greetingMessage?: string;
   complationMessage?: string;
   outOfHoursMessage?: string;
+  ratingMessage?: string;
   queueIds?: number[];
   token?: string;
-  maxUseBotQueues?: number;
-  timeUseBotQueues?: string;
-  expiresTicket?: string;
-  allowGroup?: boolean;
-  sendIdQueue?: number;
+  provider?: string;
+  channel?: string;
   timeSendQueue?: number;
+  sendIdQueue?: number;
+  timeUseBotQueues?: string | number;
+  maxUseBotQueues?: string | number;
+  expiresTicket?: number;
+  expiresInactiveMessage?: string;
   timeInactiveMessage?: string;
   inactiveMessage?: string;
-  ratingMessage?: string;
-  maxUseBotQueuesNPS?: number;
-  expiresTicketNPS?: number;
-  whenExpiresTicket?: string;
-  expiresInactiveMessage?: string;
   groupAsTicket?: string;
   importOldMessages?: string;
   importRecentMessages?: string;
-  importOldMessagesGroups?: boolean;
   closedTicketsPostImported?: boolean;
+  importOldMessagesGroups?: boolean;
   timeCreateNewTicket?: number;
-  integrationId?: number;
   schedules?: any[];
   promptId?: number;
-  requestQR?: boolean;
+  collectiveVacationEnd?: string;
   collectiveVacationMessage?: string;
   collectiveVacationStart?: string;
-  collectiveVacationEnd?: string;
   queueIdImportMessages?: number;
   flowIdNotPhrase?: number;
   flowIdWelcome?: number;
+  channelType?: string;
+  wabaPhoneNumberId?: string;
+  wabaAccessToken?: string;
+  wabaBusinessAccountId?: string;
+  wabaWebhookVerifyToken?: string;
+  allowGroup?: boolean;
+  maxUseBotQueuesNPS?: number;
+  expiresTicketNPS?: number;
+  whenExpiresTicket?: string;
+  // ---------- EVOLUTION API ----------
+  evolutionApiUrl?: string;
+  evolutionApiKey?: string;
+  evolutionInstanceName?: string;
 }
 
 interface Request {
@@ -77,37 +85,46 @@ const UpdateWhatsAppService = async ({
     greetingMessage,
     complationMessage,
     outOfHoursMessage,
+    ratingMessage,
     queueIds = [],
     token,
-    maxUseBotQueues = 0,
-    timeUseBotQueues = 0,
-    expiresTicket = 0,
-    allowGroup,
-    timeSendQueue = 0,
-    sendIdQueue = null,
-    timeInactiveMessage = 0,
-    inactiveMessage,
-    ratingMessage,
-    maxUseBotQueuesNPS,
-    expiresTicketNPS = 0,
-    whenExpiresTicket,
+    provider,
+    channel,
+    timeSendQueue,
+    sendIdQueue,
+    timeUseBotQueues,
+    maxUseBotQueues,
+    expiresTicket,
     expiresInactiveMessage,
+    timeInactiveMessage,
+    inactiveMessage,
     groupAsTicket,
     importOldMessages,
     importRecentMessages,
     closedTicketsPostImported,
     importOldMessagesGroups,
-    timeCreateNewTicket = null,
-    integrationId,
+    timeCreateNewTicket,
     schedules,
     promptId,
-    requestQR = false,
     collectiveVacationEnd,
     collectiveVacationMessage,
     collectiveVacationStart,
     queueIdImportMessages,
     flowIdNotPhrase,
-    flowIdWelcome
+    flowIdWelcome,
+    channelType,
+    wabaPhoneNumberId,
+    wabaAccessToken,
+    wabaBusinessAccountId,
+    wabaWebhookVerifyToken,
+    allowGroup,
+    maxUseBotQueuesNPS,
+    expiresTicketNPS,
+    whenExpiresTicket,
+    // ---------- EVOLUTION API ----------
+    evolutionApiUrl,
+    evolutionApiKey,
+    evolutionInstanceName
   } = whatsappData;
 
   try {
@@ -134,9 +151,17 @@ const UpdateWhatsAppService = async ({
       await oldDefaultWhatsapp.update({ isDefault: false });
     }
   }
-  // console.log("GETTING WHATSAPP SHOW WHATSAPP 1", whatsappId, companyId)
+
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
 
+  // ==========================================
+  // CORREÇÃO: Manter o canal da evolution seguro na hora de editar
+  // ==========================================
+  let finalChannel = channel || whatsapp.channel; // mantem o atual se nao vier
+  if (channelType === "evolution" || (evolutionInstanceName && evolutionInstanceName.trim() !== "")) {
+    finalChannel = "evolution";
+  }
+  // ==========================================
 
   await whatsapp.update({
     name,
@@ -145,29 +170,26 @@ const UpdateWhatsAppService = async ({
     greetingMessage,
     complationMessage,
     outOfHoursMessage,
+    ratingMessage,
     isDefault,
     companyId,
     token,
-    maxUseBotQueues: maxUseBotQueues || 0,
-    timeUseBotQueues: timeUseBotQueues || 0,
-    expiresTicket: expiresTicket || 0,
-    allowGroup,
+    provider,
+    channel: finalChannel, // <-- Aplicado
     timeSendQueue,
     sendIdQueue,
+    timeUseBotQueues,
+    maxUseBotQueues,
+    expiresTicket,
+    expiresInactiveMessage,
     timeInactiveMessage,
     inactiveMessage,
-    ratingMessage,
-    maxUseBotQueuesNPS,
-    expiresTicketNPS,
-    whenExpiresTicket,
-    expiresInactiveMessage,
     groupAsTicket,
     importOldMessages,
     importRecentMessages,
     closedTicketsPostImported,
     importOldMessagesGroups,
     timeCreateNewTicket,
-    integrationId,
     schedules,
     promptId,
     collectiveVacationEnd,
@@ -175,12 +197,23 @@ const UpdateWhatsAppService = async ({
     collectiveVacationStart,
     queueIdImportMessages,
     flowIdNotPhrase,
-    flowIdWelcome
+    flowIdWelcome,
+    channelType: channelType || finalChannel, // <-- Aplicado
+    wabaPhoneNumberId,
+    wabaAccessToken,
+    wabaBusinessAccountId,
+    wabaWebhookVerifyToken,
+    allowGroup,
+    maxUseBotQueuesNPS,
+    expiresTicketNPS,
+    whenExpiresTicket,
+    // ---------- EVOLUTION API ----------
+    evolutionApiUrl,
+    evolutionApiKey,
+    evolutionInstanceName
   });
 
-  if (!requestQR) {
-    await AssociateWhatsappQueue(whatsapp, queueIds);
-  }
+  await AssociateWhatsappQueue(whatsapp, queueIds);
 
   return { whatsapp, oldDefaultWhatsapp };
 };

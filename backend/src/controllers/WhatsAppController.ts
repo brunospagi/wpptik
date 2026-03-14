@@ -65,6 +65,10 @@ interface WhatsappData {
   wabaAccessToken?: string;
   wabaBusinessAccountId?: string;
   wabaWebhookVerifyToken?: string;
+  // Campos da Evolution API
+  evolutionApiUrl?: string;
+  evolutionApiKey?: string;
+  evolutionInstanceName?: string;
 }
 
 interface QueryParams {
@@ -130,7 +134,10 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     wabaPhoneNumberId,
     wabaAccessToken,
     wabaBusinessAccountId,
-    wabaWebhookVerifyToken
+    wabaWebhookVerifyToken,
+    evolutionApiUrl,
+    evolutionApiKey,
+    evolutionInstanceName
   }: WhatsappData = req.body;
   const { companyId } = req.user;
 
@@ -142,8 +149,6 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
       error: "Você não possui permissão para acessar este recurso!"
     });
   }
-
-  // logs de debug removidos
 
   const { whatsapp, oldDefaultWhatsapp } = await CreateWhatsAppService({
     name,
@@ -186,7 +191,10 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     wabaPhoneNumberId,
     wabaAccessToken,
     wabaBusinessAccountId,
-    wabaWebhookVerifyToken
+    wabaWebhookVerifyToken,
+    evolutionApiUrl,
+    evolutionApiKey,
+    evolutionInstanceName
   });
 
   StartWhatsAppSessionUnified(whatsapp, companyId);
@@ -231,15 +239,6 @@ export const storeFacebook = async (
       addInstagram: boolean;
     } = req.body;
     const { companyId } = req.user;
-
-    // const company = await ShowCompanyService(companyId)
-    // const plan = await ShowPlanService(company.planId);
-
-    // if (!plan.useFacebook) {
-    //   return res.status(400).json({
-    //     error: "Você não possui permissão para acessar este recurso!"
-    //   });
-    // }
 
     const { data } = await getPageProfile(facebookUserId, facebookUserToken);
 
@@ -358,9 +357,7 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.user;
   const { session } = req.query;
 
-  // console.log("SHOWING WHATSAPP", whatsappId)
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId, session);
-
 
   return res.status(200).json(whatsapp);
 };
@@ -418,15 +415,20 @@ export const remove = async (
   if (profile !== "admin") {
     throw new AppError("ERR_NO_PERMISSION", 403);
   }
-  // log de debug removido
+
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
 
+  // CORREÇÃO: Permite deletar se for whatsapp OU evolution
+  if (whatsapp.channel === "whatsapp" || whatsapp.channel === "evolution") {
 
-  if (whatsapp.channel === "whatsapp") {
-    await DeleteBaileysService(whatsappId);
+    // Só executa rotinas exclusivas do Baileys se for realmente whatsapp/baileys
+    if (whatsapp.channel === "whatsapp") {
+      await DeleteBaileysService(whatsappId);
+      removeWbot(+whatsappId);
+    }
+
     await DeleteWhatsAppService(whatsappId);
     await cacheLayer.delFromPattern(`sessions:${whatsappId}:*`);
-    removeWbot(+whatsappId);
 
     await emitToCompanyNamespace(
       companyId,
@@ -538,11 +540,17 @@ export const removeAdmin = async (
   const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
 
 
-  if (whatsapp.channel === "whatsapp") {
-    await DeleteBaileysService(whatsappId);
+  // CORREÇÃO: Permite deletar se for whatsapp OU evolution
+  if (whatsapp.channel === "whatsapp" || whatsapp.channel === "evolution") {
+
+    // Só executa rotinas exclusivas do Baileys se for realmente whatsapp/baileys
+    if (whatsapp.channel === "whatsapp") {
+      await DeleteBaileysService(whatsappId);
+      removeWbot(+whatsappId);
+    }
+
     await DeleteWhatsAppService(whatsappId);
     await cacheLayer.delFromPattern(`sessions:${whatsappId}:*`);
-    removeWbot(+whatsappId);
 
     io.of(`/workspace-${companyId}`)
       .emit(`admin-whatsapp`, {
@@ -584,10 +592,8 @@ export const removeAdmin = async (
 export const showAdmin = async (req: Request, res: Response): Promise<Response> => {
   const { whatsappId } = req.params;
   const { companyId } = req.user;
-  // console.log("SHOWING WHATSAPP ADMIN", whatsappId)
   const whatsapp = await ShowWhatsAppServiceAdmin(whatsappId);
 
 
   return res.status(200).json(whatsapp);
 };
-
